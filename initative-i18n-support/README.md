@@ -40,8 +40,8 @@ The specification defines the full scope and its exceptions.
 | [feature-specification.md](feature-specification.md) | Draft requirements, scope, delivery steps, acceptance criteria and maintaining-team decisions. |
 | [decisions.md](decisions.md) | Confirmed answers from the clarification discussion, including scope and compatibility requirements. |
 | [api-impact.md](api-impact.md) | Technical analysis of potentially affected RPCs, websocket events, stored messages and shared integration boundaries. |
-| [api-classification.md](api-classification.md) | Consumer classes, translation policies, caller evidence and limits of the inventory. |
-| [api-classification.csv](api-classification.csv) | Method-level inventory of 253 RPCs, including classifications and source/caller references. |
+| [api-classification.md](api-classification.md) | Consumer classes, text assessment, translation policy, evidence limits and non-RPC surfaces. |
+| [api-classification.csv](api-classification.csv) | All 253 RPCs with separate assessments of response-body and error text, plus handler and caller evidence. |
 | [adr/](adr/README.md) | Eight architectural decision records covering help URLs, message contracts and runtimes, account locale, secondary renderers and email, selector access, rollout, historical messages and catalog checks. The index records each ADR's status and owner action. |
 | [english-copy-audit.md](english-copy-audit.md) | Audit template for explicit before/after wording corrections and maintaining-team review. No corrections have been proposed or applied during planning. |
 | [backlog.md](backlog.md) | Deferred work, currently Discord notification localization. |

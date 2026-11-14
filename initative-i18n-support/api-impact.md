@@ -85,20 +85,23 @@ error helpers must respect the per-endpoint policy.
 ## RPC endpoints with message-bearing responses
 
 RPC paths follow `/api/<package>.<Service>/<Method>`. Method names below use the
-exact names in the checked-in contracts.
+exact names in the checked-in contracts. For the current per-method assessment
+of what each handler actually exposes, see the [text classification](api-classification.md#does-the-api-expose-text-that-may-need-translation)
+and [CSV inventory](api-classification.csv). The table below provides context
+for the main migration seams.
 
 | Service and methods | Potential impact |
 | --- | --- |
-| `user_service.AuthenticationService.Login` | `LoginResponse.message` is an English-message field in the contract, even when a particular success path leaves it empty. Authentication errors also need stable application reasons. |
-| `user_service.RegistrationService.Register`, `VerifyEmail`, `ResendVerificationEmail` | Response `message` fields; verification and resend paths currently populate English success messages. Token expiry and email-verification requirements must become semantic error reasons. |
+| `user_service.AuthenticationService.Login` | The current handler leaves `LoginResponse.message` empty. Authentication errors need stable application reasons. |
+| `user_service.RegistrationService.Register`, `VerifyEmail`, `ResendVerificationEmail` | `Register` leaves `message` empty. Verification and resend populate English success messages. Token expiry and email-verification requirements need semantic error reasons. |
 | `user_service.OrganizationService.ConnectOrganization`, `RefreshTitles`, `SubmitVerification`, `ApproveVerification`, `RejectVerification`, `ManuallySetOrgMembership`, `AdminRefreshUserTitles` | English outcome `message` fields. These operation messages are in scope even though organization title content is excluded from translation. |
-| `analysis_service.AnalysisService.RequestAnalysis`, `GetAnalysisStatus` | `message` and `error_message`; existing status enums and queue positions already provide part of the structured result. Persisted worker failures need a display-safe application reason separate from diagnostics. |
+| `analysis_service.AnalysisService.RequestAnalysis`, `GetAnalysisStatus` | `RequestAnalysis.message` carries application outcomes alongside a status and queue position. `GetAnalysisStatus.error_message` carries stored diagnostics. The checked-in analyzer displays its own failed-status label. |
 | `league_service.LeagueService.InviteUserToLeagues`, `RevokeUserFromLeagues`, `MovePlayerToDivision`, `CreateDivision`, `DeleteDivision`, `RecalculateSeasonExtendedStats`, `AddSeasonTimeBank`, `CancelPlayerResults` | English `message` fields, including dynamic player names, minutes and counts. Some operations need explicit outcome codes in addition to a success boolean. |
-| `tournament_service.TournamentService` methods returning `TournamentResponse`; `SetSingleRoundControls` | `warnings` currently contains delimiter-encoded `WooglesError` strings. Structured warnings affect every method sharing these response types; preserve the distinction between a failed request and successful work with warnings. |
+| `tournament_service.TournamentService.PairRound`, `SetPairing`, `SetSingleRoundControls` | These handlers populate `warnings` with delimiter-encoded `WooglesError` strings. Preserve the distinction between a failed request and successful work with warnings. |
 | `tournament_service.TournamentService.PreviewPairings` | Nested `SchemePreview.name`, `unavailable_reason`, `notes`, and `RoundsAlternative.reason` are generated English explanations displayed in the director UI. These require message identities and parameters, not just a generic error adapter. |
-| `pair_service.PairService.HandlePairRequest`; `tournament_service.TournamentService.RunCOP` | Shared `ipc.PairResponse` already has `error_code`, plus `error_message` and a free-form `log`. No direct UI call to these RPCs was found. Treat them as protected external/backend contracts rather than approved UI migrations; adapt any UI-visible pairing failures at the in-scope boundary. |
-| `user_service.SocializeService.GetChatsForChannel`, `GetActiveChatChannels`; `mod_service.ModService.GetChannelChats`, `ListChatChannels` | Player chat history and previews can contain server-authored messages. Existing moderation review excludes senderless system lines; preserve that behavior. Translate moderation's generated channel labels while retaining user-authored chat. No message-body search is present; channel/entity discovery and history retrieval must keep working. |
-| `user_service.ProfileService.GetBadgesMetadata`; `config_service.ConfigService.AddBadge` | Badge descriptions and their authoring/catalog pipeline need review. Most profile rendering currently uses the generated badge-description map; the metadata API remains used by admin UI. Badge codes and image identities stay stable. |
+| `pair_service.PairService.HandlePairRequest`; `tournament_service.TournamentService.RunCOP` | `HandlePairRequest` can populate `error_message` and `log` for the external COP interface. `RunCOP` uses the same schema and returns an empty `PairResponse` after authorization. |
+| `user_service.SocializeService.GetChatsForChannel`, `GetActiveChatChannels`; `mod_service.ModService.GetChannelChats`, `ListChatChannels` | Player game/observer history can contain server-authored challenge text. The known producer does not write to the private or competition channels indexed for previews. `GetChannelChats` filters senderless system lines, and `ListChatChannels` builds application-owned labels using names as data. Preserve the parsed channel tags, user chat and discovery behavior. |
+| `user_service.ProfileService.GetBadgesMetadata`; `config_service.ConfigService.AddBadge` | Metadata returns descriptions displayed in the admin UI. `AddBadge` takes a description and returns an empty body. Badge codes and image identities stay stable while the description authoring/catalog workflow is reviewed. |
 | `broadcast_service.BroadcastService.GetBroadcast` | `feed_error` exposes a persisted feed failure in the director UI. Separate the translatable failure category from upstream technical details. |
 | `puzzle_service.PuzzleService.GetPuzzleJobLogs` | Nested `PuzzleJobLog.error_status` is displayed in admin UI. Review how diagnostic text is presented alongside a translated failure category. |
 
@@ -110,7 +113,8 @@ The shared `TournamentResponse` covers 29 declared methods: `UnfinishTournament`
 `OpenRegistration`, `CloseRegistration`, `OpenCheckins`, `CloseCheckins`,
 `UncheckAllIn`, `RemoveAllPlayersNotCheckedIn`, `CheckIn`, `Register`,
 `InitializeMonitoringKeys`, `RequestMonitoringStream`, and `ResetMonitoringStream`.
-Whether a particular method emits warnings today must be checked at its producer.
+Of those handlers, `PairRound` and `SetPairing` populate `TournamentResponse.warnings`.
+`SetSingleRoundControls` populates the warning field on its own response type.
 
 ## Error responses across the API
 
@@ -187,8 +191,8 @@ that every websocket message type appears on this stream.
 | --- | --- |
 | `/embed/<gameId>` | HTML title, loading text and HTTP errors, plus a separately built embed bundle. Existing embed URLs must remain usable. |
 | `/api/broadcasts/obs/...`, `/api/annotations/obs/game/...`, `/api/annotations/obs/user/...` | Class c OBS-client surfaces: HTML, plain-text fields and SSE streams remain out of scope. The application URL builder and its local preview remain in scope as UI. |
-| `/gameimg/...` | Generated images can contain application labels. Preserve image URLs and game notation while preparing captions for translation. |
-| `TournamentService.GetTournamentScorecards`, `ExportTournament` | Scorecard/PDF and export outputs need classification of application labels versus stable data formats. The PDF service is a separate Python consumer of tournament metadata and data RPCs. |
+| `/gameimg/...` | The current renderer draws a board, tile notation and scores. No application caption was identified in this endpoint. Preserve image URLs and game notation. |
+| `TournamentService.GetTournamentScorecards`, `ExportTournament` | Scorecard PDFs contain application-owned captions. Keep tournament exports as machine-targeted formats. The PDF service is a separate Python consumer of tournament metadata and data RPCs. |
 | `/integrations/csrf`, `/integrations/patreon/callback`, `/integrations/twitch/callback` | HTTP errors currently contain English or underlying error text. A directly opened callback needs a user-facing renderer rather than a bare translation code. External OAuth protocol fields are not translation targets. |
 
 For in-scope rendering consumers, resolve a code where the final user-facing
